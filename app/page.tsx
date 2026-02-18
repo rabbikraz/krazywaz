@@ -9,7 +9,7 @@ import ViewCounter from '@/components/ViewCounter'
 import { Calendar, Clock, Info } from 'lucide-react'
 import { getDb, getD1Database } from '@/lib/db'
 import { shiurim, platformLinks } from '@/lib/schema'
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq, or, isNull } from 'drizzle-orm'
 
 // Mark as dynamic to avoid build-time database access
 export const dynamic = 'force-dynamic'
@@ -26,10 +26,11 @@ async function getLatestShiurim() {
 
     const db = getDb(d1)
 
-    // Fetch latest 9 shiurim directly from database
+    // Fetch latest 9 published shiurim directly from database
     const allShiurim = await db
       .select()
       .from(shiurim)
+      .where(or(eq(shiurim.status, 'published'), isNull(shiurim.status)))
       .orderBy(desc(shiurim.pubDate))
       .limit(9)
       .all()

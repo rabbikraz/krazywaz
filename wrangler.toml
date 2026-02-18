@@ -9,15 +9,26 @@ binding = "DB"
 database_name = "rabbi-kraz-db"
 database_id = "ed0b9cd5-86e2-4a75-a375-cd12903a2da4"
 
+# R2 Storage bucket for media uploads (audio, PDFs, video)
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "krazywaz-media"
+
 # Assets configuration for OpenNext
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
-# Environment variables (set via dashboard or wrangler secret)
+# Local / default environment variables
+# These are used when running `wrangler dev` locally
 [vars]
-NEXT_PUBLIC_BASE_URL = "https://krazywaz.rabbikraz1.workers.dev"
+NEXT_PUBLIC_BASE_URL = "http://localhost:8787"
+# ADMIN_SETUP_TOKEN — set via `wrangler secret` or .dev.vars, not here
 
 [build]
 command = "npm run build:worker"
 
+# Production environment overrides
+# Applied when deploying with `wrangler deploy` or using `--env production`
+[env.production.vars]
+NEXT_PUBLIC_BASE_URL = "https://krazywaz.rabbikraz1.workers.dev"

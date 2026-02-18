@@ -82,6 +82,39 @@ async function convertImageToDataUrl(file: File): Promise<PageData> {
 }
 
 // ============================================================================
+// IMAGE UPLOAD HELPER
+// ============================================================================
+
+/**
+ * Upload a base64 data URL image to R2 via /api/upload.
+ * Returns the public URL (e.g. /api/media/images/...).
+ */
+async function uploadImageToR2(dataUrl: string, slug: string, sourceId: string): Promise<string> {
+    // Convert base64 data URL to a Blob/File
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'png'
+    const file = new File([blob], `source-${sourceId}.${ext}`, { type: blob.type || 'image/png' })
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('slug', `${slug}-source-${sourceId}`)
+
+    const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+    })
+
+    if (!uploadRes.ok) {
+        const err = await uploadRes.json() as { error?: string }
+        throw new Error(err.error || 'Failed to upload source image')
+    }
+
+    const data = await uploadRes.json() as { url: string }
+    return data.url
+}
+
+// ============================================================================
 // CLIPPING FUNCTION
 // ============================================================================
 
@@ -206,6 +239,9 @@ export default function SourceManager() {
     // Sources List (Can include legacy ones not on current canvas)
     const [sources, setSources] = useState<Source[]>([])
 
+    // Original PDF file(s) uploaded by the user (for uploading to R2 on save)
+    const [uploadedPdfFiles, setUploadedPdfFiles] = useState<File[]>([])
+
     // Tools
     const [drawMode, setDrawMode] = useState<DrawMode>('rectangle')
 
@@ -321,6 +357,7 @@ export default function SourceManager() {
             if (file.type === 'application/pdf') {
                 setStatusMessage('Converting PDF...')
                 pageData = await convertPdfToImages(file)
+                setUploadedPdfFiles(prev => [...prev, file])
             } else {
                 setStatusMessage('Loading image...')
                 pageData = [await convertImageToDataUrl(file)]
@@ -785,9 +822,13 @@ export default function SourceManager() {
                 }
             })
 
-            // Store as JSON with individual source images for HTML rendering
+            // Store as JSON with individual source images uploaded to R2.
             // We BAKE the rotation into the image so the frontend doesn't need to handle it
             // and so aspect ratios are correct in the final image.
+            const shiur = shiurim.find(s => s.id === selectedShiurId)
+            const uploadSlug = shiur?.slug || shiur?.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'source'
+
+            let uploadedCount = 0
             const sourceData = await Promise.all(sources.map(async (source) => {
                 let finalImage = source.clippedImage
                 let finalRotation = source.rotation
@@ -801,10 +842,17 @@ export default function SourceManager() {
                     }
                 }
 
+                // Upload image to R2 if it's a base64 data URL
+                let imageUrl = finalImage
+                if (finalImage && finalImage.startsWith('data:')) {
+                    setStatusMessage(`Uploading source image ${++uploadedCount} of ${sources.length}...`)
+                    imageUrl = await uploadImageToR2(finalImage, uploadSlug, source.id)
+                }
+
                 return {
                     id: source.id,
                     name: source.name,
-                    image: finalImage,
+                    image: imageUrl,
                     rotation: finalRotation,
                     reference: source.reference,
                     displaySize: source.displaySize || 75
@@ -814,15 +862,35 @@ export default function SourceManager() {
             // Save as JSON string to sourcesJson field (separate from PDF link in sourceDoc)
             const sourcesJsonStr = JSON.stringify(sourceData)
 
-            // Upload to the shiur
-            setStatusMessage('Uploading to shiur...')
+            // Upload original PDF to R2 if we have one
+            let pdfUrl: string | undefined
+            if (uploadedPdfFiles.length > 0) {
+                setStatusMessage('Uploading PDF to storage...')
+                const pdfFile = uploadedPdfFiles[0]
+                const pdfFormData = new FormData()
+                pdfFormData.append('file', pdfFile)
+                pdfFormData.append('slug', uploadSlug)
+                const pdfRes = await fetch('/api/upload', { method: 'POST', body: pdfFormData })
+                if (pdfRes.ok) {
+                    const pdfData = await pdfRes.json() as { url: string }
+                    pdfUrl = pdfData.url
+                } else {
+                    console.error('PDF upload failed, continuing without sourceDoc')
+                }
+            }
+
+            // Save to the shiur
+            setStatusMessage('Saving to shiur...')
+
+            const updateBody: Record<string, string> = { sourcesJson: sourcesJsonStr }
+            if (pdfUrl) {
+                updateBody.sourceDoc = pdfUrl
+            }
 
             const res = await fetch(`/api/shiurim/${selectedShiurId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sourcesJson: sourcesJsonStr
-                })
+                body: JSON.stringify(updateBody)
             })
 
             if (!res.ok) {
@@ -830,7 +898,6 @@ export default function SourceManager() {
                 throw new Error(errData.error || 'Failed to update shiur')
             }
 
-            const shiur = shiurim.find(s => s.id === selectedShiurId)
             setStatusMessage(`✓ Applied to "${shiur?.title}"`)
             alert(`Source sheet successfully applied to "${shiur?.title}"!\n\nThe sources have been saved and will display on the shiur page.`)
 

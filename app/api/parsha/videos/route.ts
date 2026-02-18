@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, getD1Database } from '@/lib/db'
 import { cachedPlaylists, cachedVideos, shiurim } from '@/lib/schema'
-import { eq, like } from 'drizzle-orm'
+import { eq, like, or, isNull } from 'drizzle-orm'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         const shiurSlugs = new Map<string, string>()
 
         if (shiurIds.length > 0) {
-            const allShiurim = await db.select().from(shiurim).all()
+            const allShiurim = await db.select().from(shiurim).where(or(eq(shiurim.status, 'published'), isNull(shiurim.status))).all()
             for (const s of allShiurim) {
                 if (shiurIds.includes(s.id) && s.slug) {
                     shiurSlugs.set(s.id, s.slug)

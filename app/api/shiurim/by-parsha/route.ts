@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, getD1Database } from '@/lib/db'
 import { shiurim, platformLinks } from '@/lib/schema'
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq, or, isNull } from 'drizzle-orm'
 import { getParshaVariants } from '@/lib/parsha-utils'
 
 export async function GET(request: NextRequest) {
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
         const allShiurim = await db
             .select()
             .from(shiurim)
+            .where(or(eq(shiurim.status, 'published'), isNull(shiurim.status)))
             .orderBy(desc(shiurim.pubDate))
             .all()
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb, getD1Database } from '@/lib/db'
 import { shiurim, platformLinks, users } from '@/lib/schema'
 import { cookies } from 'next/headers'
-import { eq } from 'drizzle-orm'
+import { eq, and, or, isNull } from 'drizzle-orm'
 
 async function isAuthenticated(d1: D1Database) {
   const cookieStore = await cookies()
@@ -35,11 +35,15 @@ export async function GET(
     }
 
     const db = getDb(d1)
+    const isAdmin = await isAuthenticated(d1)
 
     const shiur = await db
       .select()
       .from(shiurim)
-      .where(eq(shiurim.id, id))
+      .where(isAdmin
+        ? eq(shiurim.id, id)
+        : and(eq(shiurim.id, id), or(eq(shiurim.status, 'published'), isNull(shiurim.status)))
+      )
       .get()
 
     if (!shiur) {
@@ -97,6 +101,7 @@ export async function PUT(
       duration?: string
       link?: string
       thumbnail?: string
+      status?: 'draft' | 'published' | 'scheduled'
       platformLinks?: any
     }
     const data = body
@@ -123,6 +128,7 @@ export async function PUT(
     if (data.duration !== undefined) updateData.duration = data.duration
     if (data.link !== undefined) updateData.link = data.link
     if (data.thumbnail !== undefined) updateData.thumbnail = data.thumbnail || null
+    if (data.status !== undefined) updateData.status = data.status
     updateData.updatedAt = new Date()
 
     let updatedShiur
@@ -168,6 +174,7 @@ export async function PUT(
           duration: updateData.duration ?? currentShiur.duration,
           link: updateData.link ?? currentShiur.link,
           thumbnail: updateData.thumbnail ?? currentShiur.thumbnail,
+          status: updateData.status ?? currentShiur.status,
           createdAt: currentShiur.createdAt,
           updatedAt: new Date(),
         }).execute()

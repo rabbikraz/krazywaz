@@ -407,18 +407,16 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {showForm && (
+        {showForm && !editingShiur && (
           <div className="mb-8">
             <ShiurForm
-              shiur={editingShiur}
+              shiur={null}
               onSuccess={() => {
                 setShowForm(false)
-                setEditingShiur(null)
                 fetchShiurim()
               }}
               onCancel={() => {
                 setShowForm(false)
-                setEditingShiur(null)
               }}
             />
           </div>
@@ -458,6 +456,9 @@ export default function AdminDashboard() {
                           <div className="text-sm font-medium text-gray-900 max-w-md truncate">
                             {shiur.title}
                           </div>
+                          {shiur.status === 'draft' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Draft</span>
+                          )}
                           {/* Hover Edit Button */}
                           <button
                             onClick={() => {

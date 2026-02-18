@@ -9,7 +9,7 @@ import ViewCounter from '@/components/ViewCounter'
 import Footer from '@/components/Footer'
 import { getDb, getD1Database } from '@/lib/db'
 import { shiurim, platformLinks } from '@/lib/schema'
-import { eq, or } from 'drizzle-orm'
+import { eq, or, and, isNull } from 'drizzle-orm'
 
 // Mark as dynamic to avoid build-time database access
 export const dynamic = 'force-dynamic'
@@ -29,7 +29,10 @@ async function getShiurBySlug(slug: string) {
         const shiur = await db
             .select()
             .from(shiurim)
-            .where(or(eq(shiurim.slug, slug), eq(shiurim.id, slug)))
+            .where(and(
+                or(eq(shiurim.slug, slug), eq(shiurim.id, slug)),
+                or(eq(shiurim.status, 'published'), isNull(shiurim.status))
+            ))
             .get()
 
         if (!shiur) {

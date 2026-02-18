@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
         snippet(shiurim_fts, 2, '<mark>', '</mark>', '...', 48) as descSnippet
       FROM shiurim_fts
       JOIN shiurim ON shiurim.id = shiurim_fts.id
-      WHERE shiurim_fts MATCH ?
+      WHERE shiurim_fts MATCH ? AND (shiurim.status = 'published' OR shiurim.status IS NULL)
       ORDER BY rank
       LIMIT 20
     `).bind(searchTerm).all()

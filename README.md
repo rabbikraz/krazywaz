@@ -1,250 +1,198 @@
-# Rabbi Kraz Website
+# Rabbi Kraz Shiurim
 
-A modern Next.js website for Rabbi Kraz with admin panel, RSS feed integration, and YouTube playlist/video management.
+A Next.js web app for Rabbi Kraz's shiurim (Torah lectures) with admin panel, file uploads, RSS feed sync, and YouTube playlist integration. Runs on Cloudflare Workers + D1 + R2.
 
 ## Features
 
-- 🎙️ **RSS Feed Integration** - Automatically syncs shiurim from RSS feed
-- 🎵 **Audio Player** - Custom audio player with playback controls and speed options
-- 📄 **Source Sheet Viewer** - Embedded PDF/Document viewer for source sheets
-- 🎬 **YouTube Integration** - Displays playlists and videos from YouTube channel
-- 👨‍💼 **Admin Panel** - Manage shiurim, update titles, blurbs, links, and source documents
-- 📱 **Mobile Responsive** - Fully responsive design for all devices
-- 🎨 **Modern UI** - Clean, professional design matching rabbikraz.com
+- 🎙️ **RSS Feed Sync** — Import shiurim from a podcast RSS feed
+- 🎵 **Audio Player** — Playback with speed controls and range-request streaming
+- 📄 **Source Sheet Manager** — Upload PDFs, clip source regions, attach to shiurim
+- 🎬 **YouTube Integration** — Playlist sync and categorization by parsha
+- 📤 **File Uploads** — Audio, video, PDF, and image uploads to Cloudflare R2
+- 👨‍💼 **Admin Panel** — Full CRUD for shiurim, bulk link import, analytics
+- 📱 **Responsive** — Mobile-first design
 
 ## Tech Stack
 
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type-safe development
-- **Prisma** - Database ORM with PostgreSQL (production) / SQLite (development)
-- **Tailwind CSS** - Utility-first CSS framework
-- **YouTube Data API v3** - For playlist and video integration
+- **Next.js 15** with App Router (via [OpenNext for Cloudflare](https://opennextjs.org/cloudflare))
+- **Cloudflare Workers** — Edge runtime
+- **Cloudflare D1** — SQLite database
+- **Cloudflare R2** — Object storage for media files
+- **Drizzle ORM** — Type-safe database queries
+- **Tailwind CSS** — Styling
+- **TypeScript**
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
+- Node.js 18+
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) (`npm i -g wrangler`)
+- A Cloudflare account
 
-- Node.js 18+ installed
-- npm or yarn package manager
-- YouTube API key (for playlists/videos pages)
+## Local Development
 
-### Installation
+### 1. Clone and install
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/laibelb/krazy.git
-   cd krazy
-   ```
+```bash
+git clone https://github.com/minevich/krazywaz.git
+cd krazywaz
+npm install
+```
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+### 2. Configure environment
 
-3. **Set up environment variables:**
-   
-   Create a `.env` file in the root directory:
-   ```env
-   DATABASE_URL="file:./dev.db"
-   NEXTAUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=your-secret-key-here
-   RSS_FEED_URL=https://anchor.fm/s/d89491c4/podcast/rss
-   YOUTUBE_API_KEY=your-youtube-api-key-here
-   NEXT_PUBLIC_BASE_URL=http://localhost:3000
-   ```
+Create a `.dev.vars` file in the project root (this is gitignored):
 
-4. **Set up the database:**
-   ```bash
-   npx prisma generate
-   npx prisma migrate dev --name init
-   ```
+```env
+ADMIN_SETUP_TOKEN=your-setup-token
+RSS_FEED_URL=https://your-podcast-rss-feed.com/feed.xml
+YOUTUBE_API_KEY=your-youtube-api-key
+OCR_SPACE_API_KEY=your-ocr-space-api-key
+```
 
-5. **Create an admin user:**
-   ```bash
-   npm run create-admin
-   ```
-   Follow the prompts to enter email and password.
+The `wrangler.toml` already configures the D1 database and R2 bucket bindings for local dev.
 
-6. **Run the development server:**
-   ```bash
-   npm run dev
-   ```
+### 3. Run database migrations
 
-7. **Open your browser:**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+```bash
+npm run db:migrate -- --local
+```
 
-## YouTube API Setup
+This creates all tables in the local D1 database.
 
-To enable the playlists and videos pages, you need a YouTube Data API key:
+### 4. Start the dev server
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the "YouTube Data API v3"
-4. Go to "Credentials" → "Create Credentials" → "API Key"
-5. Copy your API key and add it to `.env` as `YOUTUBE_API_KEY`
+```bash
+npm run preview
+```
 
-## Admin Panel
+This builds the app and starts a local Wrangler dev server at `http://localhost:8787`.
 
-Access the admin panel at `/admin` and log in with your admin credentials.
+### 5. Create an admin user
 
-### Features:
-- **RSS Sync** - Sync shiurim from RSS feed
-- **Edit Shiurim** - Update title, blurb, description, source document, and platform links
-- **Delete Shiurim** - Remove shiurim from the database
-- **Platform Links** - Manage links to YouTube, Spotify, Apple Podcasts, Amazon, Pocket Casts, 24Six, Castbox, and YouTube Music
+With the dev server running, create your admin account:
+
+```bash
+curl -X POST http://localhost:8787/api/admin/create-user \
+  -H "Content-Type: application/json" \
+  -H "X-Setup-Token: your-setup-token" \
+  -d '{"email": "you@example.com", "password": "your-password", "name": "Admin"}'
+```
+
+Then log in at `http://localhost:8787/admin`.
+
+### Resetting the local database (if needed)
+
+```bash
+rm -rf .wrangler/state
+npm run db:migrate -- --local
+```
+
+Then recreate your admin user.
+
+## Deploying to Cloudflare
+
+### 1. Authenticate with Cloudflare
+
+```bash
+wrangler login
+```
+
+### 2. Create the D1 database (first time only)
+
+```bash
+wrangler d1 create rabbi-kraz-db
+```
+
+Copy the `database_id` into `wrangler.toml` under `[[d1_databases]]`.
+
+### 3. Create the R2 bucket (first time only)
+
+```bash
+wrangler r2 bucket create krazywaz-media
+```
+
+### 4. Run production migrations
+
+```bash
+npm run db:migrate
+```
+
+### 5. Set secrets
+
+```bash
+wrangler secret put ADMIN_SETUP_TOKEN
+wrangler secret put RSS_FEED_URL
+wrangler secret put YOUTUBE_API_KEY
+```
+
+### 6. Deploy
+
+The best option is to configure Cloudflare Pages to deploy from this repository automatically.
+
+Alternatively, you can deploy manually:
+
+```bash
+npm run deploy
+```
+
+This builds the OpenNext worker bundle and deploys to Cloudflare Workers.
+
+### 7. Create admin user (first deploy only)
+
+```bash
+curl -X POST https://your-worker.workers.dev/api/admin/create-user \
+  -H "Content-Type: application/json" \
+  -H "X-Setup-Token: your-setup-token" \
+  -d '{"email": "you@example.com", "password": "your-password", "name": "Admin"}'
+```
+
+After creating your admin user, you can remove the `ADMIN_SETUP_TOKEN` secret for security:
+
+```bash
+wrangler secret delete ADMIN_SETUP_TOKEN
+```
+
+### Production environment variables
+
+Set `NEXT_PUBLIC_BASE_URL` in `wrangler.toml` under `[env.production.vars]` to your production URL.
 
 ## Project Structure
 
 ```
-rabbikraz/
-├── app/                    # Next.js app directory
-│   ├── admin/             # Admin panel pages
-│   ├── api/               # API routes
-│   ├── shiur/             # Individual shiur pages
-│   ├── playlists/         # YouTube playlists page
-│   ├── videos/            # YouTube videos page
+krazywaz/
+├── app/                     # Next.js App Router pages
+│   ├── admin/               # Admin panel + source manager
+│   ├── api/                 # API routes (auth, upload, shiurim, rss, media)
+│   ├── playlists/           # YouTube playlist pages
+│   └── page.tsx             # Homepage
+├── components/              # React components
+│   ├── FileUploader.tsx     # Drag-and-drop file upload with progress
+│   ├── ShiurForm.tsx        # Create/edit shiur form
+│   ├── SourceManager.tsx    # PDF source clipping tool
+│   ├── SourceSheetViewer.tsx # Source display on shiur pages
+│   ├── AudioPlayer.tsx      # Audio playback
 │   └── ...
-├── components/            # React components
-├── lib/                   # Utility functions
-├── prisma/                # Prisma schema
-└── public/                # Static assets
+├── lib/                     # Shared utilities
+│   ├── db.ts                # D1 + R2 access helpers
+│   ├── schema.ts            # Drizzle ORM schema
+│   └── auth.ts              # Auth (SHA-256 password hashing)
+├── migrations/              # D1 SQL migrations
+├── wrangler.toml            # Cloudflare Workers config
+└── .dev.vars                # Local env vars (gitignored)
 ```
 
 ## Scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run create-admin` - Create admin user
-- `npx prisma studio` - Open Prisma Studio (database GUI)
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string (production) or SQLite path (development) | Yes |
-| `SUPABASE_DATABASE_URL` | Alternative database URL (used if DATABASE_URL not set) | Optional |
-| `NEXTAUTH_URL` | Base URL for authentication | Yes |
-| `NEXTAUTH_SECRET` | Secret key for JWT tokens | Yes |
-| `RSS_FEED_URL` | RSS feed URL for shiurim | Yes |
-| `YOUTUBE_API_KEY` | YouTube Data API key | Optional (for playlists/videos) |
-| `NEXT_PUBLIC_BASE_URL` | Public base URL | Optional |
-| `ADMIN_SETUP_TOKEN` | Secret token for one-time admin user creation (can be removed after setup) | Optional (for initial setup) |
-
-## Deployment to Netlify
-
-### Prerequisites
-
-1. A GitHub repository with your code
-2. A Netlify account
-3. A PostgreSQL database (recommended: [Supabase](https://supabase.com) or [Neon](https://neon.tech))
-
-### Step-by-Step Deployment
-
-1. **Set up your PostgreSQL database:**
-   - Create a PostgreSQL database (Supabase, Neon, or any PostgreSQL provider)
-   - Get your connection string (it should look like: `postgresql://user:password@host:port/database`)
-   - For Supabase, add `?sslmode=require` to the connection string if not already included
-
-2. **Push your code to GitHub:**
-   ```bash
-   git add .
-   git commit -m "Prepare for Netlify deployment"
-   git push origin main
-   ```
-
-3. **Deploy to Netlify:**
-   - Go to [Netlify](https://app.netlify.com)
-   - Click "Add new site" → "Import an existing project"
-   - Connect your GitHub repository
-   - Netlify will auto-detect Next.js settings
-
-4. **Configure Environment Variables in Netlify:**
-   - Go to Site settings → Environment variables
-   - Add the following variables:
-     ```
-     DATABASE_URL=postgresql://user:password@host:port/database?sslmode=require
-     NEXTAUTH_URL=https://your-site-name.netlify.app
-     NEXTAUTH_SECRET=generate-a-random-secret-string-here
-     RSS_FEED_URL=https://anchor.fm/s/d89491c4/podcast/rss
-     NEXT_PUBLIC_BASE_URL=https://your-site-name.netlify.app
-     YOUTUBE_API_KEY=your-youtube-api-key (optional)
-     ```
-   - **Important:** Generate a secure random string for `NEXTAUTH_SECRET` (you can use: `openssl rand -base64 32`)
-
-5. **Create Admin User:**
-   After the first deployment, create an admin user using the setup API endpoint:
-   
-   **Step 1:** Add `ADMIN_SETUP_TOKEN` to your Netlify environment variables:
-   - Generate a secure random token (e.g., `openssl rand -base64 32`)
-   - Add it as `ADMIN_SETUP_TOKEN` in Netlify environment variables
-   
-   **Step 2:** Make a POST request to create the admin user:
-   ```bash
-   curl -X POST https://your-site-name.netlify.app/api/admin/create-user \
-     -H "Content-Type: application/json" \
-     -H "X-Setup-Token: your-admin-setup-token-here" \
-     -d '{"email":"admin@example.com","password":"your-secure-password","name":"Admin"}'
-   ```
-   
-   Or use any HTTP client (Postman, Insomnia, etc.) with:
-   - URL: `https://your-site-name.netlify.app/api/admin/create-user`
-   - Method: POST
-   - Headers: 
-     - `Content-Type: application/json`
-     - `X-Setup-Token: your-admin-setup-token-here`
-   - Body:
-     ```json
-     {
-       "email": "admin@example.com",
-       "password": "your-secure-password",
-       "name": "Admin"
-     }
-     ```
-   
-   **Step 3:** After creating your admin user, you can optionally remove the `ADMIN_SETUP_TOKEN` environment variable to disable this endpoint for security.
-
-6. **Trigger a new deployment:**
-   - After setting environment variables, go to Deploys → Trigger deploy → Deploy site
-   - The build will run migrations automatically
-
-### Post-Deployment Checklist
-
-- [ ] Verify the site loads correctly
-- [ ] Test the admin login at `/admin`
-- [ ] Verify database migrations ran successfully (check build logs)
-- [ ] Test RSS sync functionality
-- [ ] Verify all API routes work correctly
-
-### Troubleshooting
-
-**Database connection errors:**
-- Ensure `DATABASE_URL` includes `?sslmode=require` for Supabase
-- Check that your database allows connections from Netlify's IP ranges
-- Verify the connection string is correct
-
-**Admin login not working:**
-- Ensure you've created an admin user
-- Check that the database has the User table
-- Verify cookies are working (check browser console)
-
-**Build failures:**
-- Check build logs in Netlify dashboard
-- Ensure all environment variables are set
-- Verify Node.js version is 18 (set in netlify.toml)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| Command | Description |
+|---------|-------------|
+| `npm run preview` | Build and run locally with Wrangler |
+| `npm run deploy` | Build and deploy to Cloudflare |
+| `npm run db:migrate` | Run D1 migrations (production) |
+| `npm run db:migrate -- --local` | Run D1 migrations (local) |
+| `npm run db:studio` | Open Drizzle Studio (database GUI) |
+| `npm run dev` | Next.js dev server (no Cloudflare bindings) |
+| `npm run lint` | Run ESLint |
 
 ## License
 
-This project is private and proprietary.
-
-## Support
-
-For issues or questions, please contact the repository owner.
+Private and proprietary.
